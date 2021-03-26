@@ -1,0 +1,47 @@
+#!/bin/bash
+# This block defines the variable the user of the script needs to input
+# when deploying using this script.
+#
+#
+#<UDF name="hostname" label="The hostname for new server.">
+# HOSTNAME=
+#
+#<UDF name="fqdn" label="The new server's fully qualified domain name">
+# FQDN =
+
+# Sets the variable $IPADDR to the IP address the new server receives.
+IPADDR=$(/sbin/ifconfig eth0 | awk '/inet / { print $2 }' | sed 's/addr://')
+
+# Updates the packages on the system from distro repositories.
+apt-get update
+apt-get upgrade -y
+
+# Sets the hostname.
+echo $HOSTNAME > /etc/hostname
+hostname -F /etc/hostname
+
+# Sets the FQDN in the hosts file.
+echo $IPADDR $FQDN $HOSTNAME >> /etc/hosts
+
+# Configures unattended-upgrades for automatic updates.
+sudo apt install unattended-upgrades
+
+# Creates a non root account
+adduser [username]
+
+# Adds non root account to sudoers
+adduser [username] sudo
+
+# Limits SSH to IPv4
+echo 'AddressFamily inet' | sudo tee -a /etc/ssh/sshd_config
+
+# Restarts SSH for changes to take effect
+sudo systemctl restart sshd
+
+# Creates a .ssh directory and sets appropriate permissions
+mkdir -p ~/.ssh && chmod -R 700 ~/.ssh/
+
+# Sets permissions for public key directory and file
+sudo chmod -R 700 ~/.ssh && chmod 600 ~/.ssh/authorized_keys
+
+# TODO disable remote root, restart SSH, install fail2ban, configure a HID.
