@@ -1,0 +1,27 @@
+# Local environment files — never commit real values
+config/env
+config/*.env
+.env
+.env.*
+!.env.example
+
+# Private keys and certificates
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Shell history that might capture secrets
+.bash_history
+.zsh_history
+
+# Editor and OS noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Test output
+tests/*.log
