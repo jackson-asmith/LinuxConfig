@@ -3,8 +3,9 @@ set -euo pipefail
 trap 'echo "ERROR: script failed at line $LINENO" >&2' ERR
 
 # Base system setup for RHEL-based hosts.
-# Configures: hostname, packages, NTP, SSH hardening, admin user,
-#             firewall, and SELinux.
+# Configures: hostname, packages, NTP, SELinux, admin user, SSH hardening,
+#             firewall, sysctl hardening, auditd, PAM lockout, automatic
+#             updates, core dump disabling, and login banner.
 #
 # Required variables:
 #   HOSTNAME      Short hostname for the server
@@ -12,10 +13,12 @@ trap 'echo "ERROR: script failed at line $LINENO" >&2' ERR
 #   ADMIN_USER    Non-root sudoer account to create
 #
 # Optional variables:
-#   ADMIN_SSH_KEY     Public key to install in the admin user's authorized_keys
-#   NTP_SERVERS       Space-separated NTP server list (default: AD server + pool.ntp.org)
-#   SSH_PORT          SSH port (default: 22)
-#   FIREWALL_EXTRA_SERVICES  Space-separated firewalld services to allow beyond defaults
+#   ADMIN_SSH_KEY            Public key for the admin user's authorized_keys
+#   NTP_SERVERS              Space-separated NTP server list
+#                            (default: AD_SERVER if set, then pool.ntp.org)
+#   SSH_PORT                 SSH port (default: 22)
+#   FIREWALL_EXTRA_SERVICES  Space-separated extra firewalld services to allow
+#   LOGIN_BANNER             Banner text written to /etc/issue and /etc/issue.net
 
 : "${HOSTNAME:?HOSTNAME must be set}"
 : "${FQDN:?FQDN must be set}"
@@ -29,7 +32,12 @@ IPADDR=$(ip -4 addr show scope global | awk '/inet / { print $2 }' | cut -d/ -f1
 # ── Packages ──────────────────────────────────────────────────────────────────
 
 dnf update -y
-dnf install -y chrony firewalld
+dnf install -y \
+    chrony \
+    firewalld \
+    dnf-automatic \
+    audit \
+    libpwquality
 
 # ── Hostname ──────────────────────────────────────────────────────────────────
 
@@ -56,7 +64,7 @@ fi
 # ── NTP ───────────────────────────────────────────────────────────────────────
 
 # Kerberos requires clocks to be within 5 minutes of the AD server.
-# Default to AD_SERVER (set by ad-join.sh context) + public fallback.
+# Default to AD_SERVER (available when run via deploy.sh) + public fallback.
 NTP_SERVERS="${NTP_SERVERS:-${AD_SERVER:-} pool.ntp.org}"
 
 {
@@ -71,6 +79,79 @@ NTP_SERVERS="${NTP_SERVERS:-${AD_SERVER:-} pool.ntp.org}"
 
 systemctl enable --now chronyd
 chronyc makestep
+
+# ── Kernel / sysctl hardening ─────────────────────────────────────────────────
+
+# Covers CIS Benchmark Level 1 network and kernel parameter recommendations.
+cat > /etc/sysctl.d/90-hardening.conf <<EOF
+# Managed by base-setup.sh
+
+# Prevent SYN flood attacks
+net.ipv4.tcp_syncookies = 1
+
+# Disable IP source routing and ICMP redirects
+net.ipv4.conf.all.accept_source_route = 0
+net.ipv4.conf.default.accept_source_route = 0
+net.ipv4.conf.all.accept_redirects = 0
+net.ipv4.conf.default.accept_redirects = 0
+net.ipv4.conf.all.send_redirects = 0
+net.ipv4.conf.default.send_redirects = 0
+net.ipv4.conf.all.secure_redirects = 0
+
+# Enable reverse path filtering to prevent IP spoofing
+net.ipv4.conf.all.rp_filter = 1
+net.ipv4.conf.default.rp_filter = 1
+
+# Ignore broadcast ICMP requests
+net.ipv4.icmp_echo_ignore_broadcasts = 1
+
+# Disable IPv6 if not in use
+net.ipv6.conf.all.disable_ipv6 = 1
+net.ipv6.conf.default.disable_ipv6 = 1
+
+# Address space layout randomisation
+kernel.randomize_va_space = 2
+
+# Prevent core dumps from exposing sensitive memory
+fs.suid_dumpable = 0
+EOF
+
+sysctl --system
+
+# ── Core dumps ────────────────────────────────────────────────────────────────
+
+# Disable core dumps system-wide to prevent credential leakage from memory.
+cat > /etc/security/limits.d/90-coredump.conf <<EOF
+# Managed by base-setup.sh
+*    hard    core    0
+EOF
+
+# Belt-and-suspenders: also disable via systemd
+mkdir -p /etc/systemd/coredump.conf.d
+cat > /etc/systemd/coredump.conf.d/90-disable.conf <<EOF
+[Coredump]
+Storage=none
+ProcessSizeMax=0
+EOF
+
+# ── Audit daemon ──────────────────────────────────────────────────────────────
+
+# auditd is a compliance requirement across CIS, PCI-DSS, and HIPAA.
+# The default RHEL ruleset is sufficient for a base build; environment-specific
+# rules should be layered on top via /etc/audit/rules.d/.
+systemctl enable --now auditd
+
+# ── PAM lockout (faillock) ────────────────────────────────────────────────────
+
+# Lock accounts for 15 minutes after 5 failed login attempts.
+# faillock replaces pam_tally2 in RHEL 8+.
+cat > /etc/security/faillock.conf <<EOF
+# Managed by base-setup.sh
+deny = 5
+unlock_time = 900
+silent
+audit
+EOF
 
 # ── Admin user ────────────────────────────────────────────────────────────────
 
@@ -136,5 +217,27 @@ done
 
 firewall-cmd --reload
 firewall-cmd --list-all
+
+# ── Automatic security updates ────────────────────────────────────────────────
+
+# Apply security updates automatically; other update types are left for
+# Satellite / change management to control.
+sed -i 's/^upgrade_type\s*=.*/upgrade_type = security/' /etc/dnf/automatic.conf
+sed -i 's/^apply_updates\s*=.*/apply_updates = yes/' /etc/dnf/automatic.conf
+sed -i 's/^emit_via\s*=.*/emit_via = motd/' /etc/dnf/automatic.conf
+
+systemctl enable --now dnf-automatic.timer
+
+# ── Login banner ──────────────────────────────────────────────────────────────
+
+LOGIN_BANNER="${LOGIN_BANNER:-"Authorized use only. All activity may be monitored and reported."}"
+
+echo "$LOGIN_BANNER" | tee /etc/issue /etc/issue.net > /dev/null
+
+# Serve the banner over SSH pre-authentication
+if ! grep -q 'Banner /etc/issue.net' /etc/ssh/sshd_config.d/90-hardening.conf; then
+    echo "Banner /etc/issue.net" >> /etc/ssh/sshd_config.d/90-hardening.conf
+    systemctl restart sshd
+fi
 
 echo "Base setup complete for ${HOSTNAME} (${FQDN})"
