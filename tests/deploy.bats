@@ -10,6 +10,53 @@ setup() {
     setup_satellite_env
     setup_rejoin_env
     export DRY_RUN="true"
+
+    # Mock all system commands called across the four stage scripts so
+    # deploy.bats runs cleanly on any OS (Linux, macOS, CI).
+    for cmd in dnf yum hostnamectl setenforce sysctl systemctl chronyc \
+               useradd usermod chmod chown mkdir semanage firewall-cmd sed \
+               update-crypto-policies dig authselect visudo install envsubst \
+               rpm; do
+        mock_command "$cmd"
+    done
+
+    # ip — return a predictable address for base-setup.sh
+    cat > "${MOCK_BIN}/ip" <<'EOF'
+#!/bin/bash
+echo "    inet 192.168.1.100/24 scope global eth0"
+EOF
+    chmod +x "${MOCK_BIN}/ip"
+
+    # getenforce — report Enforcing so base-setup.sh doesn't abort
+    cat > "${MOCK_BIN}/getenforce" <<'EOF'
+#!/bin/bash
+echo "Enforcing"
+EOF
+    chmod +x "${MOCK_BIN}/getenforce"
+
+    # realm — report not joined by default
+    cat > "${MOCK_BIN}/realm" <<'EOF'
+#!/bin/bash
+exit 0
+EOF
+    chmod +x "${MOCK_BIN}/realm"
+
+    # subscription-manager — report not registered by default
+    cat > "${MOCK_BIN}/subscription-manager" <<'EOF'
+#!/bin/bash
+if [[ "$1" == "status" ]]; then
+    echo "Overall Status: Unknown"
+fi
+exit 0
+EOF
+    chmod +x "${MOCK_BIN}/subscription-manager"
+
+    # crontab — report no existing jobs by default
+    cat > "${MOCK_BIN}/crontab" <<'EOF'
+#!/bin/bash
+exit 0
+EOF
+    chmod +x "${MOCK_BIN}/crontab"
 }
 
 teardown() {

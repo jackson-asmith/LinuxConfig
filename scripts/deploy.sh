@@ -36,7 +36,11 @@ run_stage() {
 
     echo ""
     echo "━━━ Stage: ${name} ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    DRY_RUN="$DRY_RUN" bash "${SCRIPT_DIR}/${script}"
+    if ! DRY_RUN="$DRY_RUN" bash "${SCRIPT_DIR}/${script}"; then
+        echo "" >&2
+        echo "ERROR: Stage '${name}' failed. Use SKIP_* flags to skip completed stages on re-run." >&2
+        exit 1
+    fi
     echo "━━━ Done:  ${name}"
 }
 

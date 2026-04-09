@@ -15,6 +15,16 @@ Cmnd_Alias SHELLS = /bin/sh, \
                     /usr/bin/su
 
 ## Domain group permissions
+#
+# Group names must match exactly what SSSD presents to the OS.
+# With use_fully_qualified_names = False in sssd.conf (the default in this
+# pipeline), SSSD strips the domain suffix — so the group is "domain admins",
+# not "domain admins@example.com". If use_fully_qualified_names = True is
+# ever enabled, append @DOMAIN to each group name below.
+#
+# LinuxAdmins is a custom AD security group; domain admins is the built-in
+# AD group — adjust both names to match your AD environment.
+
 # LinuxAdmins: full sudo except shell escalation and sudoers editing
 "%LinuxAdmins"    ALL=(ALL)    ALL, !SHELLS, !RESTRICTED
 

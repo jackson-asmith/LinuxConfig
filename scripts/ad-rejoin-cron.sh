@@ -35,15 +35,26 @@ run() {
 # Install required packages
 run yum install -y oddjob oddjob-mkhomedir sssd adcli realmd
 
-# Write the rejoin script (credentials come from environment at install time;
-# the script stores them locally with root-only permissions)
-run bash -c "cat > '${REJOIN_SCRIPT}' <<'EOF'
+# Write credentials to a dedicated file rather than embedding them in the
+# executable. This keeps the rejoin script readable without exposing secrets
+# and makes credential rotation independent of the script itself.
+#
+# Production alternative: use a Kerberos keytab instead of a password file:
+#   adcli preset-computer --domain="${AD_DOMAIN}" --login-user="${AD_JOIN_USER}"
+# Store the keytab at /etc/sssd/ad-rejoin.keytab (400 root:root) and replace
+# the kinit call below with: kinit -k -t /etc/sssd/ad-rejoin.keytab "${AD_JOIN_USER}"
+CRED_FILE="/etc/sssd/.ad-rejoin"
+run bash -c "printf 'AD_JOIN_USER=%s\nAD_JOIN_PASS=%s\nAD_DOMAIN=%s\n' \
+    '${AD_JOIN_USER}' '${AD_JOIN_PASS}' '${AD_DOMAIN}' > '${CRED_FILE}'"
+run chown root:root "$CRED_FILE"
+run chmod 600 "$CRED_FILE"
+
+# Write the rejoin script — sources credentials from the separate cred file
+run bash -c "cat > '${REJOIN_SCRIPT}' <<'SCRIPT'
 #!/bin/bash
 set -euo pipefail
-
-AD_JOIN_USER=\"${AD_JOIN_USER}\"
-AD_JOIN_PASS=\"${AD_JOIN_PASS}\"
-AD_DOMAIN=\"${AD_DOMAIN}\"
+# shellcheck source=/etc/sssd/.ad-rejoin
+source /etc/sssd/.ad-rejoin
 
 if realm list | grep -q \"domain-name: \${AD_DOMAIN}\"; then
     exit 0
@@ -61,7 +72,7 @@ sed -i 's|fallback_homedir = /home/%u@%d|fallback_homedir = /home/%u|' /etc/sssd
 systemctl stop sssd
 systemctl start sssd
 systemctl daemon-reload
-EOF"
+SCRIPT"
 
 run chown root:root "$REJOIN_SCRIPT"
 run chmod 700 "$REJOIN_SCRIPT"
