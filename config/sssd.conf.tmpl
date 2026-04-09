@@ -1,0 +1,23 @@
+# SSSD configuration
+# Variables substituted at deploy time via envsubst:
+#   AD_DOMAIN, AD_SERVER, KRB5_REALM
+
+[sssd]
+domains = ${AD_DOMAIN}
+config_file_version = 2
+services = nss, pam
+
+[domain/${AD_DOMAIN}]
+ad_server    = ${AD_SERVER}
+ad_domain    = ${AD_DOMAIN}
+krb5_realm   = ${KRB5_REALM}
+realmd_tags  = manages-system joined-with-adcli
+id_provider  = ad
+access_provider = ad
+
+cache_credentials           = True
+krb5_store_password_if_offline = True
+ldap_id_mapping             = True
+use_fully_qualified_names   = False
+fallback_homedir            = /home/%u
+default_shell               = /bin/bash

@@ -1,0 +1,34 @@
+# Kerberos 5 configuration
+# Variables substituted at deploy time via envsubst:
+#   AD_DOMAIN, AD_SERVER, KRB5_REALM
+
+# To opt out of the system crypto-policies configuration of krb5, remove the
+# symlink at /etc/krb5.conf.d/crypto-policies which will not be recreated.
+includedir /etc/krb5.conf.d/
+
+[logging]
+    default = FILE:/var/log/krb5libs.log
+    kdc     = FILE:/var/log/krb5kdc.log
+    admin_server = FILE:/var/log/kadmind.log
+
+[libdefaults]
+    dns_lookup_realm        = true
+    ticket_lifetime         = 24h
+    renew_lifetime          = 7d
+    forwardable             = true
+    rdns                    = false
+    pkinit_anchors          = FILE:/etc/pki/tls/certs/ca-bundle.crt
+    spake_preauth_groups    = edwards25519
+    dns_canonicalize_hostname = fallback
+    qualify_shortname       = ""
+    default_ccache_name     = KEYRING:persistent:%{uid}
+
+[realms]
+${KRB5_REALM} = {
+    kdc          = ${AD_SERVER}
+    admin_server = ${AD_SERVER}
+}
+
+[domain_realm]
+.${AD_DOMAIN} = ${KRB5_REALM}
+${AD_DOMAIN}  = ${KRB5_REALM}
