@@ -56,3 +56,15 @@ jobs:
 
       - name: Check sudoers drop-in with visudo
         run: visudo -cf config/sudoers.d/domain-groups
+
+  test:
+    name: bats-core unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install bats-core
+        uses: bats-core/bats-action@2.0.0
+
+      - name: Run tests
+        run: bats tests/

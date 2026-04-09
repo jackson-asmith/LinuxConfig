@@ -17,20 +17,34 @@ trap 'echo "ERROR: script failed at line $LINENO" >&2' ERR
 #
 # Optional variables:
 #   SATELLITE_ENV             Content view environment     (default: Library)
+#   DRY_RUN                   Set to "true" to print commands without executing
 
 : "${SATELLITE_SERVER:?SATELLITE_SERVER must be set}"
 : "${SATELLITE_ORG:?SATELLITE_ORG must be set}"
 : "${SATELLITE_ACTIVATION_KEY:?SATELLITE_ACTIVATION_KEY must be set}"
 
 SATELLITE_ENV="${SATELLITE_ENV:-Library}"
+DRY_RUN="${DRY_RUN:-false}"
+
+run() {
+    if [[ "$DRY_RUN" == "true" ]]; then
+        echo "[DRY RUN] $*"
+    else
+        "$@"
+    fi
+}
+
+[[ "$DRY_RUN" == "true" ]] && echo "--- Dry-run mode enabled: no changes will be made ---"
 
 # Install the Satellite CA certificate. This configures subscription-manager
 # to trust the Satellite server and points /etc/rhsm/rhsm.conf at it.
-rpm -Uvh --force \
+run rpm -Uvh --force \
     "http://${SATELLITE_SERVER}/pub/katello-ca-consumer-latest.noarch.rpm"
 
 # Register with Satellite (idempotent).
-if subscription-manager status 2>/dev/null | grep -q 'Overall Status: Current'; then
+if [[ "$DRY_RUN" == "true" ]]; then
+    echo "[DRY RUN] subscription-manager register --org=${SATELLITE_ORG} --activationkey=*** --environment=${SATELLITE_ENV}"
+elif subscription-manager status 2>/dev/null | grep -q 'Overall Status: Current'; then
     echo "System already registered and current, skipping registration."
 else
     subscription-manager register \
@@ -42,7 +56,9 @@ fi
 
 # Install remote management tooling. Prefer rhc (Satellite 6.11+); fall back
 # to katello-agent if rhc is not available from this Satellite server.
-if yum info rhc &>/dev/null 2>&1; then
+if [[ "$DRY_RUN" == "true" ]]; then
+    echo "[DRY RUN] yum install rhc or katello-agent (detected at runtime)"
+elif yum info rhc &>/dev/null 2>&1; then
     echo "Installing rhc (Satellite 6.11+)..."
     yum install -y rhc rhc-worker-playbook
     rhc connect \
@@ -55,7 +71,9 @@ else
 fi
 
 # Confirm final subscription state
-subscription-manager refresh
-subscription-manager status
+if [[ "$DRY_RUN" != "true" ]]; then
+    subscription-manager refresh
+    subscription-manager status
+fi
 
 echo "Satellite registration complete (org: ${SATELLITE_ORG}, key: ${SATELLITE_ACTIVATION_KEY})"

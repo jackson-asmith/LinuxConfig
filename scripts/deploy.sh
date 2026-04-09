@@ -11,6 +11,7 @@ trap 'echo "ERROR: deploy failed at line $LINENO" >&2' ERR
 #
 # Usage:
 #   sudo -E ./scripts/deploy.sh
+#   DRY_RUN=true ./scripts/deploy.sh     # Print commands without executing
 #
 # Stages (can be skipped by setting SKIP_<STAGE>=true):
 #   SKIP_BASE_SETUP         Skip base-setup.sh
@@ -19,6 +20,9 @@ trap 'echo "ERROR: deploy failed at line $LINENO" >&2' ERR
 #   SKIP_AD_REJOIN_CRON     Skip ad-rejoin-cron.sh
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+DRY_RUN="${DRY_RUN:-false}"
+
+[[ "$DRY_RUN" == "true" ]] && echo "=== Dry-run mode: no changes will be made ==="
 
 run_stage() {
     local name="$1"
@@ -32,14 +36,14 @@ run_stage() {
 
     echo ""
     echo "━━━ Stage: ${name} ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    bash "${SCRIPT_DIR}/${script}"
+    DRY_RUN="$DRY_RUN" bash "${SCRIPT_DIR}/${script}"
     echo "━━━ Done:  ${name}"
 }
 
-run_stage "Base setup"       base-setup.sh        SKIP_BASE_SETUP
-run_stage "AD join"          ad-join.sh           SKIP_AD_JOIN
-run_stage "Satellite"        satellite-register.sh SKIP_SATELLITE
-run_stage "AD rejoin cron"   ad-rejoin-cron.sh    SKIP_AD_REJOIN_CRON
+run_stage "Base setup"       base-setup.sh         SKIP_BASE_SETUP
+run_stage "AD join"          ad-join.sh            SKIP_AD_JOIN
+run_stage "Satellite"        satellite-register.sh  SKIP_SATELLITE
+run_stage "AD rejoin cron"   ad-rejoin-cron.sh     SKIP_AD_REJOIN_CRON
 
 echo ""
 echo "Deployment complete."
