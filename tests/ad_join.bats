@@ -95,7 +95,9 @@ teardown() {
 # ── Idempotency ───────────────────────────────────────────────────────────────
 
 @test "skips realm join if already joined to domain" {
-    # Override realm mock to report already joined
+    # Override realm mock to report already joined. The idempotency check now
+    # runs regardless of DRY_RUN so we stay in dry-run mode — no need to
+    # execute real system commands to test this branch.
     cat > "${MOCK_BIN}/realm" <<EOF
 #!/bin/bash
 echo "realm \$*" >> "${MOCK_BIN}/realm.log"
@@ -104,7 +106,6 @@ if [[ "\$1" == "list" ]]; then
 fi
 exit 0
 EOF
-    export DRY_RUN="false"
     run bash "${SCRIPTS_DIR}/ad-join.sh"
     [ "$status" -eq 0 ]
     [[ "$output" == *"Already joined"* ]]

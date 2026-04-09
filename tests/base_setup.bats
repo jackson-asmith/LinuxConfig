@@ -37,7 +37,9 @@ teardown() {
 # ── Variable guards ───────────────────────────────────────────────────────────
 
 @test "fails if HOSTNAME is not set" {
-    unset HOSTNAME
+    # unset alone is insufficient — bash re-sets HOSTNAME in every new subprocess.
+    # Exporting an empty string causes :? to treat it as unset.
+    export HOSTNAME=""
     run bash "${SCRIPTS_DIR}/base-setup.sh"
     [ "$status" -ne 0 ]
     [[ "$output" == *"HOSTNAME"* ]]

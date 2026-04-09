@@ -94,18 +94,14 @@ teardown() {
 # ── Idempotency ───────────────────────────────────────────────────────────────
 
 @test "skips cron install if job already exists" {
+    # Override crontab mock to report existing job. The idempotency check now
+    # runs regardless of DRY_RUN so we stay in dry-run mode.
     cat > "${MOCK_BIN}/crontab" <<EOF
 #!/bin/bash
 echo "crontab \$*" >> "${MOCK_BIN}/crontab.log"
 if [[ "\$1" == "-l" ]]; then
     echo "0 0 * * * ${REJOIN_SCRIPT}"
 fi
-exit 0
-EOF
-    export DRY_RUN="false"
-    # Also mock the rejoin script execution
-    cat > "${MOCK_BIN}/bash" <<'EOF'
-#!/bin/bash
 exit 0
 EOF
     run bash "${SCRIPTS_DIR}/ad-rejoin-cron.sh"

@@ -88,6 +88,8 @@ teardown() {
 # ── Idempotency ───────────────────────────────────────────────────────────────
 
 @test "skips registration if already registered and current" {
+    # Override subscription-manager mock to report registered. The idempotency
+    # check now runs regardless of DRY_RUN so we stay in dry-run mode.
     cat > "${MOCK_BIN}/subscription-manager" <<'EOF'
 #!/bin/bash
 echo "subscription-manager $*" >> "${MOCK_BIN}/subscription-manager.log"
@@ -96,7 +98,6 @@ if [[ "$1" == "status" ]]; then
 fi
 exit 0
 EOF
-    export DRY_RUN="false"
     run bash "${SCRIPTS_DIR}/satellite-register.sh"
     [ "$status" -eq 0 ]
     [[ "$output" == *"already registered"* ]]

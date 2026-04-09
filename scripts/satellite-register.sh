@@ -41,11 +41,11 @@ run() {
 run rpm -Uvh --force \
     "http://${SATELLITE_SERVER}/pub/katello-ca-consumer-latest.noarch.rpm"
 
-# Register with Satellite (idempotent).
-if [[ "$DRY_RUN" == "true" ]]; then
-    echo "[DRY RUN] subscription-manager register --org=${SATELLITE_ORG} --activationkey=*** --environment=${SATELLITE_ENV}"
-elif subscription-manager status 2>/dev/null | grep -q 'Overall Status: Current'; then
+# Register with Satellite — idempotency check runs regardless of dry-run mode.
+if subscription-manager status 2>/dev/null | grep -q 'Overall Status: Current'; then
     echo "System already registered and current, skipping registration."
+elif [[ "$DRY_RUN" == "true" ]]; then
+    echo "[DRY RUN] subscription-manager register --org=${SATELLITE_ORG} --activationkey=*** --environment=${SATELLITE_ENV}"
 else
     subscription-manager register \
         --org="${SATELLITE_ORG}" \
@@ -76,4 +76,4 @@ if [[ "$DRY_RUN" != "true" ]]; then
     subscription-manager status
 fi
 
-echo "Satellite registration complete (org: ${SATELLITE_ORG}, key: ${SATELLITE_ACTIVATION_KEY})"
+echo "Satellite registration complete (org: ${SATELLITE_ORG})"

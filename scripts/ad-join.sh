@@ -54,14 +54,15 @@ run yum install -y realmd adcli sssd sssd-tools oddjob oddjob-mkhomedir \
 # Apply Kerberos config from template
 run bash -c "envsubst < '${SCRIPT_DIR}/../config/krb5.conf.tmpl' > /etc/krb5.conf"
 
-# Join domain (idempotent)
-if [[ "$DRY_RUN" == "true" ]]; then
+# Join domain — idempotency check runs regardless of dry-run mode so that
+# dry-run output reflects actual current state of the host.
+if realm list 2>/dev/null | grep -q "domain-name: ${AD_DOMAIN}"; then
+    echo "Already joined to ${AD_DOMAIN}, skipping join."
+elif [[ "$DRY_RUN" == "true" ]]; then
     echo "[DRY RUN] realm join --user=${AD_JOIN_USER} ${AD_SERVER}"
-elif ! realm list | grep -q "domain-name: ${AD_DOMAIN}"; then
+else
     echo "Joining domain ${AD_DOMAIN}..."
     echo "$AD_JOIN_PASS" | realm join --user="$AD_JOIN_USER" "$AD_SERVER"
-else
-    echo "Already joined to ${AD_DOMAIN}, skipping join."
 fi
 
 # Apply SSSD config from template

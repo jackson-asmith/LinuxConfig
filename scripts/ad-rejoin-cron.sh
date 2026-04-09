@@ -66,15 +66,15 @@ EOF"
 run chown root:root "$REJOIN_SCRIPT"
 run chmod 700 "$REJOIN_SCRIPT"
 
-# Install cron job (idempotent)
+# Install cron job — idempotency check runs regardless of dry-run mode.
 CRON_JOB="0 0 * * * ${REJOIN_SCRIPT}"
-if [[ "$DRY_RUN" == "true" ]]; then
+if crontab -l 2>/dev/null | grep -qF "$REJOIN_SCRIPT"; then
+    echo "Cron job already installed, skipping."
+elif [[ "$DRY_RUN" == "true" ]]; then
     echo "[DRY RUN] crontab: ${CRON_JOB}"
-elif ! crontab -l 2>/dev/null | grep -qF "$REJOIN_SCRIPT"; then
+else
     ( crontab -l 2>/dev/null; echo "$CRON_JOB" ) | crontab -
     echo "Cron job installed: ${CRON_JOB}"
-else
-    echo "Cron job already installed, skipping."
 fi
 
 # Add optional wheel user
