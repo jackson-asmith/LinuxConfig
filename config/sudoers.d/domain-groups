@@ -1,0 +1,22 @@
+## Command aliases for domain group sudo rules
+
+Cmnd_Alias RESTRICTED = /bin/vi /etc/sudoers, \
+                        /bin/su - root, \
+                        /bin/su - , \
+                        /usr/sbin/visudo
+
+Cmnd_Alias SHELLS = /bin/sh, \
+                    /bin/ksh, \
+                    /bin/bash, \
+                    /bin/zsh, \
+                    /bin/csh, \
+                    /bin/tcsh, \
+                    /usr/bin/login, \
+                    /usr/bin/su
+
+## Domain group permissions
+# LinuxAdmins: full sudo except shell escalation and sudoers editing
+"%LinuxAdmins"    ALL=(ALL)    ALL, !SHELLS, !RESTRICTED
+
+# Domain Admins: unrestricted sudo
+"%domain admins"  ALL=(ALL)    NOPASSWD: ALL

@@ -1,0 +1,57 @@
+name: Lint
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run ShellCheck
+        uses: ludeeus/action-shellcheck@master
+        with:
+          scandir: "./scripts"
+          severity: warning
+
+  validate-env-example:
+    name: Validate env.example completeness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check all template variables are documented in env.example
+        run: |
+          # Extract variables used in templates (${VAR} form)
+          tmpl_vars=$(grep -hoP '\$\{\K[A-Z_]+(?=\})' config/*.tmpl | sort -u)
+
+          # Extract variable names defined in env.example
+          doc_vars=$(grep -oP '^[A-Z_]+(?==)' config/env.example | sort -u)
+
+          missing=""
+          for var in $tmpl_vars; do
+            if ! echo "$doc_vars" | grep -qx "$var"; then
+              missing="$missing $var"
+            fi
+          done
+
+          if [[ -n "$missing" ]]; then
+            echo "ERROR: The following template variables are not documented in config/env.example:"
+            echo "$missing" | tr ' ' '\n' | grep -v '^$'
+            exit 1
+          fi
+          echo "All template variables are documented."
+
+  validate-sudoers:
+    name: Validate sudoers syntax
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check sudoers drop-in with visudo
+        run: visudo -cf config/sudoers.d/domain-groups
