@@ -92,3 +92,11 @@ The included GitHub Actions workflow (`.github/workflows/lint.yml`) runs on ever
 - **sudoers validation** — `visudo -c` on the sudoers drop-in
 - **Template coverage** — verifies all template variables are documented in `env.example`
 - **bats-core** — unit tests for all scripts
+
+Run ShellCheck locally against the scripts directory to match CI:
+
+```bash
+shellcheck scripts/*.sh
+```
+
+> **Note:** Running ShellCheck directly against `.github/workflows/*.yml` produces false positives — ShellCheck's inline YAML parsing is unreliable when invoked this way. The lint workflow correctly scans only `./scripts`.
